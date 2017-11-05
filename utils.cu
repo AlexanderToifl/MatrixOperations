@@ -6,7 +6,7 @@ void CheckCudaErrorAux (const char *file, unsigned line, const char *statement, 
 {
 	if (err == cudaSuccess)
 		return;
-	printf("%s returned %s at %s: %d\n", statement, cudaGetErrorString(err), file,line);
+	printf("%s returned '%s' at %s: %d\n", statement, cudaGetErrorString(err), file,line);
 	exit (1);
 }
 

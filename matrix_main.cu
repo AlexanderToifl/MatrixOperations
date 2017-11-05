@@ -24,6 +24,7 @@ int main( int argc, char **argv )
     srand(seed);
     
     int n = atoi(argv[1]);
+    printf("n = %d\n", n);
     
     float* A = (float*) malloc(n*sizeof(float));
     float* B = (float*) malloc(n*sizeof(float));
@@ -53,15 +54,18 @@ int main( int argc, char **argv )
     
     for( i = 0; i < n*n; ++i)
     {
-        MA[i] = rand() % 20;
-        MB[i] = rand() % 20;
+        MA[i] = 1;//rand() % 5;
+        MB[i] = 1;//rand() % 5;
     }
     
     
     
-    squareMatrixAdd(MA, MB, MC, n);
+    //squareMatrixAdd(MA, MB, MC, n);
     
-    printf("MA[2,3] + MB[2,3] = %f + %f = %f \n", MA[2*1 + 3], MB[2*1 + 3], MC[2*1 + 3]);
+    squareMatrixMul(MA, MB, MC, n);
+    printf("MC[2,3] = %f\n", MC[2*n + 3]);
+    
+
     
     freeMemory( (void**) &MA);
     freeMemory( (void**) &MB);
