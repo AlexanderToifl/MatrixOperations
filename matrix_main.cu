@@ -10,7 +10,7 @@
 #include "vectorOps.h"
 #include "matrixOps.h"
 
-#define SQUARE 0
+#define SQUARE 1
 
 int main( int argc, char **argv )
 {
@@ -37,18 +37,25 @@ int main( int argc, char **argv )
     
     for(; i < n; ++i)
     {
-        A[i] = rand() % 10 ;
+        A[i] = 1;//rand() % 10 ;
         B[i] = rand() % 10 ;
         
     }
     
     vecAdd(A, B, C, n); 
+    printf("vecAdd: C[1] = %f\n",C[1]);
     
-    printf("%f\n",C[1]);
+    float mask[] = {1, 3, 5, 3, 1};
+    
+    convolution(A, B, mask, n, 5);
+    
+    printf("convolution: B[0:6] = %.2f, %.2f, %.2f, %.2f, %.2f, %.2f, %.2f\n",B[0], B[1], B[2], B[3], B[4], B[5], B[6]);
+
     
     freeMemory( (void**) &A);
     freeMemory( (void**) &B);
     freeMemory( (void**) &C);
+    return 0;
     
     
     float* MA = (float*) malloc(n*n*sizeof(float));
@@ -98,7 +105,7 @@ int main( int argc, char **argv )
     float* C = (float*) malloc(csize*sizeof(float));
     
    
-    /*
+    /* Testing
     a_nrows = 3; a_ncols = 2;
     b_nrows = 2; b_ncols = 4;
     csize = a_nrows*b_ncols;
