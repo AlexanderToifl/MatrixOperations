@@ -4,17 +4,34 @@
 #include "matrixOps.h"
 #include "utils.h"
 
-#define TILE_W 32
+#define DEBUG 0
+
+#define TILE_W 16
+#define MAX_MASK_WIDTH 17
+
+ __constant__ float d_mask[MAX_MASK_WIDTH * MAX_MASK_WIDTH];
 
 
-void printMat(float *A, int nrows, int ncols)
+
+
+__device__ int checkIndicesMat(int ix, int iy, int ncols, int nrows)
+{
+    if(ix >= 0 && ix < ncols && iy >= 0 && iy < nrows)
+        return 1;
+    else 
+        return 0;
+}
+
+
+
+__device__ __host__ void printMat(float *A, int nrows, int ncols)
 {
     printf("[\t");
     for(int iy = 0; iy < nrows; ++iy)
     {
         for(int ix = 0; ix < ncols; ++ix)
         {
-            printf("%f ", A[ncols * iy + ix]);
+            printf("%.2f ", A[ncols * iy + ix]);
         }
         printf("\n\t");
     }
@@ -131,7 +148,174 @@ __global__ void matrixMulKernel(float* d_A, float* d_B, float* d_C,int A_nrows, 
         d_C[row * B_ncols + col] = Cvalue;
 
 }
+//assuming sqaure mask and tiles
+__global__ void convolution2DKernel(float* in, float* out, int in_nrows, int in_ncols, int mask_dim)
+{
+    int bx = blockIdx.x;
+    int by = blockIdx.y;
+    
+    int tx = threadIdx.x;
+    int ty = threadIdx.y;
+    
+    __shared__ float tile[TILE_W + MAX_MASK_WIDTH - 1][TILE_W + MAX_MASK_WIDTH - 1];
+    
+    int n = (mask_dim  - 1 ) / 2; //assuming mask_dim is odd
+    
 
+    //coordinates in global memory that are associated with this thread
+    int gx = bx * TILE_W + tx - n;
+    int gy = by * TILE_W + ty - n;
+    
+    //inner indices [xi_l, xi_r) = [yi_l, yi_r)
+    int di_l = n;
+    int di_r = di_l + TILE_W;
+    
+    //halo indices
+    int hx = 0; 
+    int hy = 0;
+    
+    float ghostValue = 0;
+    
+#if DEBUG
+    int test = 0;
+#endif    
+    
+    hx = bx * TILE_W + tx - n;
+    hy = by * TILE_W + ty - n;
+    
+    if (checkIndicesMat(hx, hy, in_ncols, in_nrows) == 1)
+        tile[ty][tx] = in[hy * in_ncols + hx];
+    else
+        tile[ty][tx] = ghostValue;
+    
+     __syncthreads();
+    
+    if(hx >= in_ncols || hy >= in_nrows)
+        return;
+    
+    
+    if(tx >= di_l && tx < di_r && ty >= di_l && ty < di_r)
+    {
+        
+        float outvalue = 0;
+    
+        for( int u = 0; u < mask_dim; ++u )
+        {
+            for ( int v = 0; v < mask_dim; ++v)
+            {
+                outvalue += tile[ty - n + v][tx - n + u] * d_mask[v * mask_dim + u];
+            }
+        }
+        
+        out[hy * in_ncols + hx] = outvalue;
+    }
+    
+#if DEBUG
+    __syncthreads();
+    if(bx * blockDim.x + tx == 4 && by * blockDim.y + ty  ==1)
+    {
+        printMat( (float*) tile, TILE_W + MAX_MASK_WIDTH - 1, TILE_W + MAX_MASK_WIDTH - 1); 
+        printf("hx = %d, hy = %d\n", hx, hy);
+    }
+#endif    
+    
+    
+}
+
+/*__global__ void convolution2DKernel(float* in, float* out, int in_nrows, int in_ncols, int mask_dim)
+{
+    int i = blockIdx.x * blockDim.x + threadIdx.x;
+    int j = blockIdx.y * blockDim.y + threadIdx.y;
+    __shared__ float tile[TILE_W + MAX_MASK_WIDTH - 1][TILE_W + MAX_MASK_WIDTH - 1];
+    
+    if(i >= in_ncols || j >= in_nrows)
+        return;
+    
+    
+    int n = (mask_dim -1) / 2; //assuming mask_dim is odd
+
+    //printf("n = %d, blockDim.x = %d, blockDim.y = %d\n", n, blockDim.x, blockDim.y);
+    
+    int halo_idl = (blockIdx.x - 1) * blockDim.x + threadIdx.x; //left halo index
+    int halo_idr = (blockIdx.x + 1) * blockDim.x + threadIdx.x; //right halo index
+    int halo_idt = (blockIdx.y - 1) * blockDim.y + threadIdx.y; //top halo index
+    int halo_idb = (blockIdx.y + 1) * blockDim.y + threadIdx.y; //bottom halo index
+  
+    float ghostValue = 0.0;
+    int test = 0;
+    int test2 = 0;
+  
+    //tile[threadIdx.y + n][threadIdx.x + n] = in[j * in_ncols + i];
+    
+    if( threadIdx.x >= blockDim.x - n)
+    {
+        if(threadIdx.y >= blockDim.y - n)
+        {
+            tile[threadIdx.y + n - blockDim.y][threadIdx.x + n - blockDim.x] = (halo_idt < 0 || halo_idl < 0) ? ghostValue : in[halo_idt * in_ncols + halo_idl];
+        }
+        else if(threadIdx.y <  n)
+        {
+            tile[threadIdx.y + n + blockDim.y][threadIdx.x + n - blockDim.x] = (halo_idb >= in_nrows || halo_idl < 0) ? ghostValue : in[halo_idb * in_ncols + halo_idl];
+        }
+        else
+        {
+            tile[threadIdx.y + n][threadIdx.x + n - blockDim.x] = (halo_idl < 0) ? ghostValue : in[j * in_ncols + halo_idl];
+        }
+        
+    }
+    else if( threadIdx.x <  n)
+    {
+        if(threadIdx.y >= blockDim.y - n)
+        {
+            tile[threadIdx.y + n - blockDim.y][threadIdx.x + n + blockDim.x] = (halo_idr >= in_ncols || halo_idt < 0) ? ghostValue : in[halo_idt * in_ncols + halo_idr];
+        }
+        else if(threadIdx.y <  n )
+        {
+            test = 1;
+            tile[threadIdx.y + n + blockDim.y][threadIdx.x + n + blockDim.x] = (halo_idr >= in_ncols || halo_idb >= in_nrows) ? ghostValue : in[halo_idb * in_ncols + halo_idr];
+        }
+        else
+        {
+           
+            tile[threadIdx.y + n][threadIdx.x + n + blockDim.x] =  (halo_idr >= in_ncols) ? ghostValue : in[j * in_ncols + halo_idr];
+        }
+    }
+    else
+    {
+        if(threadIdx.y >= blockDim.y - n)
+        {
+            tile[threadIdx.y + n - blockDim.y][threadIdx.x + n] = (halo_idt < 0) ? ghostValue : in[halo_idt * in_ncols + i];
+        }
+        else if( threadIdx.y < n)
+        {
+            tile[threadIdx.y + n + blockDim.y][threadIdx.x + n] = (halo_idb >= in_nrows) ? ghostValue : in[halo_idb * in_ncols + i];
+        }
+    }
+    
+    __syncthreads();
+    
+    float outvalue = 0;
+    
+    for( int u = 0; u < mask_dim; ++u )
+    {
+        for ( int v = 0; v < mask_dim; ++v)
+        {
+            outvalue += tile[threadIdx.y + v][threadIdx.x + u] * d_mask[v * mask_dim + u];
+        }
+    }
+    
+    __syncthreads();
+    
+    out[j * in_ncols + i] = outvalue;
+    
+    if(i == 0 && j == 0)
+    {
+        printMat( (float*) tile, TILE_W + MAX_MASK_WIDTH - 1, TILE_W + MAX_MASK_WIDTH - 1); 
+        printf("halo_idl = %d, halo_idr = %d, halo_idb = %d, halo_idt = %d\n", halo_idl, halo_idr, halo_idb, halo_idt);
+        printf("test = %d, test2 = %d\n", test,test2);
+    }
+}
+*/
 
 
 void squareMatrixAdd(float* A, float* B, float* C, int dim)
@@ -231,4 +415,34 @@ void matrixMul(float* A, float* B, float* C, int A_nrows, int A_ncols, int B_nro
     CUDA_CHECK_RETURN(cudaFree(d_A));
     CUDA_CHECK_RETURN(cudaFree(d_B));
     CUDA_CHECK_RETURN(cudaFree(d_C));
+}
+
+
+
+void convolution2D(float* in, float* out, float* mask, int in_nrows, int in_ncols, int mask_dim)
+{
+    float *d_in, *d_out;
+
+    CUDA_CHECK_RETURN(cudaMalloc( (void **) &d_in, in_nrows * in_ncols * sizeof(float) ) );
+    CUDA_CHECK_RETURN(cudaMemcpy(d_in, in, in_nrows * in_ncols * sizeof(float), cudaMemcpyHostToDevice));
+    
+    CUDA_CHECK_RETURN(cudaMalloc( (void **) &d_out, in_nrows * in_ncols * sizeof(float)));
+ 
+ 
+    CUDA_CHECK_RETURN(cudaMemcpyToSymbol(d_mask, mask, mask_dim * mask_dim * sizeof(float) ) );
+    
+    int in_dim = max(in_ncols, in_nrows);
+    
+    dim3 dimGrid(ceil(in_dim/(float) TILE_W), ceil(in_dim/(float) TILE_W), 1);
+    dim3 dimTiles(TILE_W + mask_dim - 1, TILE_W + mask_dim - 1, 1);
+    
+    printf("mask_dim = %d\n", mask_dim);
+    printf("dimGrid = (%d, %d)\n", dimGrid.x, dimGrid.y);
+    printf("dimTiles = (%d, %d)\n", dimTiles.x, dimTiles.y);
+    
+    convolution2DKernel<<<dimGrid, dimTiles>>>(d_in, d_out, in_nrows, in_ncols, mask_dim);
+    
+    CUDA_CHECK_RETURN(cudaMemcpy(out, d_out,in_nrows * in_ncols * sizeof(float), cudaMemcpyDeviceToHost));
+    
+    
 }

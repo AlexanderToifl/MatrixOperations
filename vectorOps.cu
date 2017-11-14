@@ -20,7 +20,7 @@ __global__ void vecAddKernel(float* A, float* B, float* C, int n)
 
 }
 
-__global__ void convolutionKernel(float* in, float* out,  int in_size, int mask_size)
+ __global__ void convolutionKernel(float* in, float* out,  int in_size, int mask_size)
 {
     int i = blockIdx.x * blockDim.x + threadIdx.x;
     __shared__ float tile[TILE_SIZE + MAX_MASK_WIDTH - 1];

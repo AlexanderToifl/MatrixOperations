@@ -10,7 +10,7 @@
 #include "vectorOps.h"
 #include "matrixOps.h"
 
-#define SQUARE 1
+#define SQUARE 0
 
 int main( int argc, char **argv )
 {
@@ -149,9 +149,36 @@ int main( int argc, char **argv )
     matrixMul(A, B, C, a_nrows, a_ncols, b_nrows, b_ncols);
     //printMat(C, a_nrows, b_ncols);
     
+    
+    float* D = (float*) malloc(asize*sizeof(float));
+    
+   /* float mask[] = { 1, 1, 1, 1, 1,
+                     1, 2, 2, 2, 1,
+                     1, 2, 3, 2, 1,
+                     1, 2, 2, 2, 2,
+                     1, 1, 1, 1, 1};
+                     * */
+                     
+    float mask[] = { 1, 1, 1,
+                     1, 3, 1,
+                     1, 1, 1};
+
+  //float mask[] = {2};
+  
+    int masksize = 3;
+  
+    printMat(mask, masksize, masksize);
+    
+    convolution2D(A, D, mask,  a_nrows, a_ncols, masksize);
+    
+    //printMat(A, a_nrows, a_ncols);
+    //printMat(D, a_nrows, a_ncols);
+    
+    
     freeMemory( (void**) &A);
     freeMemory( (void**) &B);
     freeMemory( (void**) &C);
+    freeMemory( (void**) &D);
     
  
 #endif

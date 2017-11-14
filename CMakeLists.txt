@@ -7,7 +7,7 @@ find_package(CUDA QUIET REQUIRED)
 set(
     CUDA_NVCC_FLAGS
     ${CUDA_NVCC_FLAGS};
-    -O3 -x cu
+    -O3 -x cu -g
     )
 
 # Specify include directories
